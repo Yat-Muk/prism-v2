@@ -1,0 +1,37 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+
+      - name: Install dependencies
+        run: make deps
+
+      - name: Run linter
+        run: make lint
+
+      - name: Run tests
+        run: make test-all
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.out
+          flags: unittests
+          name: codecov-prism

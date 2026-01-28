@@ -1,0 +1,110 @@
+# .goreleaser.yaml
+version: 2
+
+project_name: prism
+
+before:
+  hooks:
+    - go mod tidy
+    - go mod download
+
+builds:
+  - id: prism
+    main: ./cmd/prism
+    binary: prism
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - "7"
+    ldflags:
+      - -s -w
+      - -X 'github.com/Yat-Muk/prism-v2/internal/pkg/version.Version={{.Version}}'
+      - -X 'github.com/Yat-Muk/prism-v2/internal/pkg/version.GitCommit={{.ShortCommit}}'
+      - -X 'github.com/Yat-Muk/prism-v2/internal/pkg/version.BuildTime={{.Date}}'
+    ignore:
+      - goos: windows
+        goarch: arm
+      - goos: windows
+        goarch: arm64
+
+# UPX 压缩配置
+upx:
+  - enabled: true
+    ids:
+      - prism
+    compress: best
+    lzma: true
+    brute: false
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: prism
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: '🚀 Features'
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: '🐛 Bug Fixes'
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: '📝 Documentation'
+      regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: '🔧 Others'
+      order: 999
+
+release:
+  github:
+    owner: Yat-Muk
+    name: prism-v2
+  draft: false
+  prerelease: auto
+  mode: replace
+  name_template: "{{.ProjectName}} {{.Version}}"
+  header: |
+    ## 🎉 Release Notes
+
+    **Full Changelog**: https://github.com/Yat-Muk/prism-v2/compare/{{ .PreviousTag }}...{{ .Tag }}
