@@ -1,4 +1,4 @@
-# --- 編譯產物 ---
+# --- 编译产物 ---
 /prism
 *.exe
 *.dll
@@ -6,37 +6,39 @@
 *.dylib
 *.test
 
-# --- 測試與覆蓋率報告 ---
+# --- 测试与覆盖率报告 ---
 coverage.html
 coverage.out
 pprof
 cpu.out
 mem.out
 
-# --- 本地配置與敏感數據 ---
+# --- 本地配置与敏感数据 ---
 config.yaml
 config.json
 .env
 
-# --- 證書與密鑰 ---
+# --- 证书与密钥 ---
 *.crt
 *.key
 *.pem
 *.csr
-internal/infra/certinfo/certs/
+/certs/
 .acme/
 
-# --- 運行時數據 ---
-backup/
+# --- 运行时数据 ---
+/backup/
+/data/
 *.log
 *.tmp
-logs/
+/logs/
 
-# --- IDE 和 系統文件 ---
+# --- IDE 和系统文件 ---
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
 
-# --- Go 依賴 ---
+# --- Go 依赖 ---
 vendor/
+
