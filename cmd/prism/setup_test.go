@@ -343,6 +343,13 @@ func BenchmarkInitializeDependencies(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, err := initializeDependencies(log, paths)
 		if err != nil {
+			errStr := err.Error()
+			if strings.Contains(errStr, "permission denied") ||
+				strings.Contains(errStr, "Systemd") ||
+				strings.Contains(errStr, "no such file or directory") {
+				b.Skipf("Skipping benchmark: Systemd unavailable in this environment (%v)", err)
+			}
+
 			b.Fatalf("Initialization failed: %v", err)
 		}
 	}
