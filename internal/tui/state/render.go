@@ -49,6 +49,7 @@ func (m *Manager) Render() string {
 			m.core.HasUpdate,
 			m.core.LatestVersion,
 			m.core.ScriptVersion,
+			m.core.ScriptLatestVersion,
 			ti,
 			statusMsg,
 		)
@@ -519,6 +520,6 @@ func (m *Manager) Render() string {
 
 	default:
 		return view.RenderMainView(
-			nil, nil, cursor, width, false, "", false, "", "Dev", ti, statusMsg)
+			nil, nil, cursor, width, false, "", false, "", "Dev", "", ti, statusMsg)
 	}
 }

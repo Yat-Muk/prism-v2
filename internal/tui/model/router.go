@@ -75,6 +75,7 @@ func (r *Router) InitModel() tea.Cmd {
 		r.cmdBuilder.UpdateDataCmd(r.stateMgr),
 		r.cmdBuilder.LoadConfigCmd(r.stateMgr),
 		r.cmdBuilder.RefreshCertListCmd(),
+		r.cmdBuilder.CheckScriptUpdateCmd(r.stateMgr),
 		TickCmd(),
 	)
 }
@@ -719,7 +720,7 @@ func (r *Router) routeMessage(message tea.Msg) tea.Cmd {
 		if msgType.Success {
 			m.Core().ScriptLatestVersion = "v" + msgType.LatestVer
 			m.Core().ScriptChangelog = msgType.Changelog
-			m.UI().SetStatus(state.StatusSuccess, "發現新版本，請確認更新", "", false)
+			m.UI().SetStatus(state.StatusSuccess, "發現新版本", "", false)
 		} else {
 			m.UI().SetStatus(state.StatusError, "檢查更新失敗", msgType.Err.Error(), false)
 			m.Core().ScriptLatestVersion = ""

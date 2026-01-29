@@ -22,6 +22,7 @@ func RenderMainView(
 	hasUpdate bool,
 	latestVersion string,
 	scriptVersion string,
+	scriptLatestVersion string,
 	ti textinput.Model,
 	statusMsg string,
 ) string {
@@ -32,7 +33,7 @@ func RenderMainView(
 	var sections []string
 
 	// 1. Logo 和標題
-	sections = append(sections, renderHeader(scriptVersion))
+	sections = append(sections, renderHeader(scriptVersion, scriptLatestVersion))
 
 	// 2. 系統信息面板
 	sections = append(sections, renderSystemInfoPanel(stats, serviceStats, width, isInstalled, coreVersion, hasUpdate, latestVersion))
@@ -58,11 +59,12 @@ func RenderMainView(
 }
 
 // renderHeader 渲染頭部 (保持不變)
-func renderHeader(scriptVersion string) string {
+func renderHeader(currentVer, latestVer string) string {
 	logo := RenderLogo()
 
 	labelStyle := lipgloss.NewStyle().Foreground(style.Snow3)
 	valueStyle := lipgloss.NewStyle().Foreground(style.Snow2)
+	newVerStyle := lipgloss.NewStyle().Foreground(style.StatusGreen)
 
 	subtitle := lipgloss.NewStyle().
 		Foreground(style.Aurora3).
@@ -70,17 +72,29 @@ func renderHeader(scriptVersion string) string {
 		AlignHorizontal(lipgloss.Center).
 		Render(":: 現代化 sing-box 管理工具 ::")
 
-	versionText := scriptVersion
+	versionText := currentVer
 	if versionText == "" {
 		versionText = "檢查中..."
 	} else if !strings.HasPrefix(versionText, "v") {
 		versionText = "v" + versionText
 	}
 
+	displayVer := valueStyle.Render(versionText)
+	if latestVer != "" {
+		cleanCurrent := strings.TrimPrefix(currentVer, "v")
+		cleanLatest := strings.TrimPrefix(latestVer, "v")
+
+		if cleanLatest != cleanCurrent {
+			arrow := lipgloss.NewStyle().Foreground(style.StatusYellow).Render(" → ")
+			newVerMsg := newVerStyle.Render(fmt.Sprintf("新版本: v%s", cleanLatest))
+			displayVer = fmt.Sprintf("%s%s%s", displayVer, arrow, newVerMsg)
+		}
+	}
+
 	infoContent := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		labelStyle.Render("腳本版本: "),
-		valueStyle.Render(versionText),
+		displayVer,
 	)
 
 	info := lipgloss.NewStyle().
