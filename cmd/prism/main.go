@@ -90,7 +90,6 @@ func runTUI(deps *AppDependencies) {
 	p := tea.NewProgram(
 		mainModel,
 		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
 	)
 
 	// 4. 崩潰保護
