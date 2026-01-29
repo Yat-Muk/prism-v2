@@ -3,12 +3,14 @@ package system
 import (
 	"bufio"
 	"fmt"
-	"net"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -21,6 +23,11 @@ type SystemInfo struct {
 	lastNetworkIO NetworkIO
 	startTime     time.Time
 	cachedOSName  string
+
+	// 緩存公網 IP
+	publicIPv4 string
+	publicIPv6 string
+	ipMutex    sync.RWMutex // 讀寫鎖保護 IP 字段
 }
 
 // CPUTime CPU 時間
@@ -35,7 +42,7 @@ type NetworkIO struct {
 	Time    time.Time
 }
 
-// Stats 系統統計信息 (已補全 TUI 所需的所有字段)
+// Stats 系統統計信息
 type Stats struct {
 	Hostname     string        // 主機名
 	OS           string        // 操作系統名稱
@@ -56,8 +63,8 @@ type Stats struct {
 	NetworkRX    float64       // 實時下載速度 (MB/s)
 	Uptime       time.Duration // 運行時間
 	BBR          string        // BBR 狀態
-	IPv4         string        // IPv4 地址
-	IPv6         string        // IPv6 地址
+	IPv4         string        // IPv4 地址 (公網)
+	IPv6         string        // IPv6 地址 (公網)
 }
 
 // ServiceStats 服務統計信息
@@ -78,19 +85,22 @@ func NewSystemInfo(log *zap.Logger) *SystemInfo {
 	}
 	s.initOSName()
 
-	// 初始化第一次讀數，避免計算出現極值
+	// 初始化第一次讀數
 	if cpu, err := s.readCPUTime(); err == nil {
 		s.lastCPUTime = cpu
 	}
 	if netIO, err := s.readNetworkIO(); err == nil {
 		s.lastNetworkIO = netIO
 	}
+
+	// 啟動後台協程獲取公網 IP (不阻塞主線程)
+	go s.refreshPublicIPs()
+
 	return s
 }
 
 func (s *SystemInfo) initOSName() {
 	s.cachedOSName = "Linux"
-	// 嘗試讀取 /etc/os-release
 	if data, err := os.ReadFile("/etc/os-release"); err == nil {
 		for _, line := range strings.Split(string(data), "\n") {
 			if strings.HasPrefix(line, "PRETTY_NAME=") {
@@ -99,6 +109,64 @@ func (s *SystemInfo) initOSName() {
 			}
 		}
 	}
+}
+
+// refreshPublicIPs 在後台獲取公網 IP
+func (s *SystemInfo) refreshPublicIPs() {
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// 獲取 IPv4
+	go func() {
+		defer wg.Done()
+		// 使用 4.ipw.cn 或 api.ipify.org
+		ip := s.fetchIPFromAPI("https://4.ipw.cn")
+		if ip != "" {
+			s.ipMutex.Lock()
+			s.publicIPv4 = ip
+			s.ipMutex.Unlock()
+		} else {
+			// 如果 API 失敗，嘗試回退到命令獲取 (雖然可能是內網 IP，總比沒有好)
+			s.ipMutex.Lock()
+			s.publicIPv4 = s.getIPv4FromCmd()
+			s.ipMutex.Unlock()
+		}
+	}()
+
+	// 獲取 IPv6
+	go func() {
+		defer wg.Done()
+		ip := s.fetchIPFromAPI("https://6.ipw.cn")
+		if ip != "" {
+			s.ipMutex.Lock()
+			s.publicIPv6 = ip
+			s.ipMutex.Unlock()
+		} else {
+			s.ipMutex.Lock()
+			s.publicIPv6 = s.getIPv6FromCmd()
+			s.ipMutex.Unlock()
+		}
+	}()
+
+	wg.Wait()
+}
+
+// fetchIPFromAPI 通用 HTTP 獲取 IP 函數
+func (s *SystemInfo) fetchIPFromAPI(url string) string {
+	client := &http.Client{
+		Timeout: 5 * time.Second, // 設置超時防止卡死
+	}
+	resp, err := client.Get(url)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(body))
 }
 
 // GetStats 獲取系統統計信息 (核心方法)
@@ -145,22 +213,22 @@ func (s *SystemInfo) GetStats() (*Stats, error) {
 		stats.NetworkTX = tx
 		stats.NetworkRX = rx
 	}
-	// 填充總流量 (從最後一次讀取中獲取)
 	stats.NetSentTotal = s.lastNetworkIO.TxBytes
 	stats.NetRecvTotal = s.lastNetworkIO.RxBytes
 
-	// 7. BBR & IP
+	// 7. BBR
 	stats.BBR, _ = s.getBBRStatus()
 
-	// 嘗試獲取 IP
-	stats.IPv4 = s.getPublicIP("udp4", "8.8.8.8:80")
-	if stats.IPv4 == "" {
-		stats.IPv4 = s.getIPv4FromCmd()
-	}
+	// 8. IP 地址 (從緩存讀取，不發起網絡請求)
+	s.ipMutex.RLock()
+	stats.IPv4 = s.publicIPv4
+	stats.IPv6 = s.publicIPv6
+	s.ipMutex.RUnlock()
 
-	stats.IPv6 = s.getPublicIP("udp6", "[2001:4860:4860::8888]:80")
-	if stats.IPv6 == "" {
-		stats.IPv6 = s.getIPv6FromCmd()
+	// 如果還沒獲取到，顯示默認值 (View 層會處理空字符串顯示為 "檢查中...")
+	if stats.IPv4 == "" {
+		// 可選：如果你希望暫時顯示內網 IP 直到公網 IP 加載出來，可以在這裡調用 getIPv4FromCmd
+		// 但為了避免混淆，建議讓它保持空，直到 HTTP 請求完成
 	}
 
 	return stats, nil
@@ -312,7 +380,6 @@ func (s *SystemInfo) getNetworkSpeed() (float64, float64, error) {
 		return 0, 0, err
 	}
 
-	// 如果是第一次或數據異常
 	if s.lastNetworkIO.Time.IsZero() {
 		s.lastNetworkIO = cur
 		return 0, 0, nil
@@ -323,7 +390,6 @@ func (s *SystemInfo) getNetworkSpeed() (float64, float64, error) {
 		return 0, 0, nil
 	}
 
-	// 處理計數器重置的情況
 	var tx, rx float64
 	if cur.TxBytes >= s.lastNetworkIO.TxBytes {
 		tx = float64(cur.TxBytes - s.lastNetworkIO.TxBytes)
@@ -333,7 +399,6 @@ func (s *SystemInfo) getNetworkSpeed() (float64, float64, error) {
 	}
 
 	s.lastNetworkIO = cur
-	// 返回 MB/s
 	return tx / diff / 1024 / 1024, rx / diff / 1024 / 1024, nil
 }
 
@@ -379,20 +444,13 @@ func (s *SystemInfo) getBBRStatus() (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
-func (s *SystemInfo) getPublicIP(netw, addr string) string {
-	conn, err := net.Dial(netw, addr)
-	if err != nil {
-		return ""
-	}
-	defer conn.Close()
-	return conn.LocalAddr().(*net.UDPAddr).IP.String()
-}
-
+// 保留此方法作為後備方案
 func (s *SystemInfo) getIPv4FromCmd() string {
 	out, _ := exec.Command("ip", "-4", "addr", "show", "scope", "global").Output()
 	return parseIP(string(out))
 }
 
+// 保留此方法作為後備方案
 func (s *SystemInfo) getIPv6FromCmd() string {
 	out, _ := exec.Command("ip", "-6", "addr", "show", "scope", "global").Output()
 	return parseIP(string(out))
@@ -411,13 +469,12 @@ func parseIP(out string) string {
 	return ""
 }
 
-// GetServiceStats 獲取服務狀態 (使用 systemctl)
+// GetServiceStats 獲取服務狀態
 func (s *SystemInfo) GetServiceStats(name string) (*ServiceStats, error) {
 	stats := &ServiceStats{
 		Status: "not-running",
 	}
 
-	// 簡單實現：通過 systemctl show 獲取
 	cmd := exec.Command("systemctl", "show", name, "--no-pager")
 	output, err := cmd.Output()
 	if err != nil {
@@ -449,7 +506,6 @@ func (s *SystemInfo) GetServiceStats(name string) (*ServiceStats, error) {
 			}
 		case "ActiveEnterTimestamp":
 			if val != "" {
-				// systemd 時間格式多變，這裡嘗試最常見的兩種
 				layouts := []string{
 					"Mon 2006-01-02 15:04:05 MST",
 					"2006-01-02 15:04:05 MST",

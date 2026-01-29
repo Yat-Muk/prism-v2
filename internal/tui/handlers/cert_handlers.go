@@ -91,7 +91,7 @@ func (h *CertHandler) handleHTTPInput(m *state.Manager) (*state.Manager, tea.Cmd
 		if input == "" {
 			// 空輸入 -> 生成隨機郵箱
 			randomID := time.Now().Unix() % 10000
-			input = fmt.Sprintf("prism_user_%d@localhost.local", randomID)
+			input = fmt.Sprintf("prism_user_%d@gmail.com", randomID)
 		} else {
 			if err := inputvalidator.ValidateEmail(input); err != nil {
 				m.UI().SetStatus(state.StatusError, err.Error(), "請重新輸入有效的郵箱地址", false)
