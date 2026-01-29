@@ -51,12 +51,17 @@ func RenderCoreMenu(
 			// coreVerDisplay += lipgloss.NewStyle().Foreground(style.Muted).Render(" (已是最新)")
 		}
 
+		displayScriptVer := scriptVersion
+		if displayScriptVer != "" && !strings.HasPrefix(displayScriptVer, "v") {
+			displayScriptVer = "v" + displayScriptVer
+		}
+
 		versionText = fmt.Sprintf(
 			"%s %s\n%s %s",
 			labelStyle.Render(" 當前版本："),
 			coreVerDisplay,
 			labelStyle.Render(" 腳本版本："),
-			lipgloss.NewStyle().Foreground(style.Snow3).Render(scriptVersion),
+			lipgloss.NewStyle().Foreground(style.Snow3).Render(displayScriptVer),
 		)
 	} else {
 		versionText = warnStyle.Render(" ⚠️  sing-box 核心未安裝")

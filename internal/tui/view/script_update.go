@@ -52,23 +52,26 @@ func RenderScriptUpdate(
 			newVerStyle = lipgloss.NewStyle().Foreground(style.StatusRed)
 		}
 
+		displayCurrent := currentVer
+		if displayCurrent != "" && !strings.HasPrefix(displayCurrent, "v") {
+			displayCurrent = "v" + displayCurrent
+		}
+
 		verBlock := fmt.Sprintf(
 			"%s %s\n%s %s",
-			labelStyle.Render(" 當前版本："),
-			valueStyle.Render(currentVer),
-			labelStyle.Render(" 最新版本："),
+			labelStyle.Render(" 當前版本: "),
+			valueStyle.Render(displayCurrent),
+			labelStyle.Render(" 最新版本: "),
 			newVerStyle.Render(verStr),
 		)
 
-		// 更新日誌 (帶邊框)
+		// 更新日誌
 		logTitle := lipgloss.NewStyle().Foreground(style.Aurora1).Render("\n📄 更新內容 / Changelog :")
 
 		logBoxStyle := lipgloss.NewStyle().
 			Foreground(style.Snow1).
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(style.Polar3).
-			Padding(0, 1).
-			Width(65)
+			Padding(0, 0).
+			Width(50)
 
 		if changelog == "" {
 			changelog = "暫無詳細說明"
@@ -93,9 +96,10 @@ func RenderScriptUpdate(
 		content = lipgloss.JoinVertical(
 			lipgloss.Left,
 			verBlock,
+			divider,
 			logTitle,
 			logBlock,
-			"\n", // 空行
+			divider,
 			menu,
 		)
 	}
@@ -109,7 +113,6 @@ func RenderScriptUpdate(
 		desc,
 		divider,
 		content,
-		"",
 		statusBlock,
 		footer,
 	)
