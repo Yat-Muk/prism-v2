@@ -711,18 +711,18 @@ func (r *Router) routeMessage(message tea.Msg) tea.Cmd {
 		return nil
 
 	case msg.ScriptCheckMsg:
-        m.state.ScriptUpdate.IsChecking = false
+		m.Core().IsCheckingScript = false
 
-        if msg.Success {
-            m.state.ScriptUpdate.LatestVer = "v" + msg.LatestVer
-            m.state.ScriptUpdate.Changelog = msg.Changelog
-            m.state.ScriptUpdate.StatusMsg = "發現新版本，請確認更新"
-        } else {
-            m.state.ScriptUpdate.StatusMsg = "檢查更新失敗: " + msg.Err.Error()
-            m.state.ScriptUpdate.LatestVer = "" 
-        }
-        return m, nil
-    }
+		if msgType.Success {
+			m.Core().ScriptLatestVersion = "v" + msgType.LatestVer
+			m.Core().ScriptChangelog = msgType.Changelog
+			m.UI().SetStatus(state.StatusSuccess, "發現新版本，請確認更新", "", false)
+		} else {
+			m.UI().SetStatus(state.StatusError, "檢查更新失敗", msgType.Err.Error(), false)
+			m.Core().ScriptLatestVersion = ""
+		}
+
+		return nil
 
 	case msg.ServiceHealthMsg:
 		if msgType.Err != nil {

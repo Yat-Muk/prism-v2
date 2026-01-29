@@ -1789,15 +1789,15 @@ func (b *CommandBuilder) CheckScriptUpdateCmd(m *state.Manager) tea.Cmd {
 // UpdateScriptExecCmd 執行腳本自我更新 (支持 tar.gz 解壓)
 func (b *CommandBuilder) UpdateScriptExecCmd(m *state.Manager) tea.Cmd {
 	return func() tea.Msg {
-		// 1. 獲取最新版本號 (從 State 中獲取)
-		version := m.ScriptUpdate().LatestVer // 例如 "v2.0.4"
+		// 1. 獲取最新版本號
+		version := m.Core().ScriptLatestVersion
 		if version == "" {
 			return msg.CommandResultMsg{Success: false, Message: "無法獲取目標版本號"}
 		}
 		// 去掉 v 前綴用於構造文件名
 		verNum := strings.TrimPrefix(version, "v")
 
-		// 2. 架構映射 (Go -> GoReleaser)
+		// 2. 架構映射
 		arch := runtime.GOARCH
 		if arch == "amd64" {
 			arch = "x86_64"
