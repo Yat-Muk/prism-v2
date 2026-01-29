@@ -2097,13 +2097,6 @@ func parseFail2BanInt(output, key string) int {
 	return 0
 }
 
-func detectSSHLogPath() string {
-	if _, err := os.Stat("/var/log/secure"); err == nil {
-		return "/var/log/secure"
-	}
-	return "/var/log/auth.log"
-}
-
 func readStaticFail2BanConfig() (int, string) {
 	retry := 5
 	banTime := "1h"
@@ -2199,7 +2192,6 @@ func (b *CommandBuilder) UpdateFail2BanConfigCmd(maxRetry, banTime string) tea.C
 	return func() tea.Msg {
 		b.log.Info("更新 Fail2Ban 配置", zap.String("retry", maxRetry), zap.String("time", banTime))
 
-		logPath := detectSSHLogPath()
 		banTimeSeconds := parseDurationToSeconds(banTime)
 
 		configContent := fmt.Sprintf(`[sshd]
@@ -2209,13 +2201,12 @@ enabled = false
 enabled = true
 filter = sshd
 port    = ssh
-logpath = %s
-backend = auto
+backend = systemd
 maxretry = %s
 bantime  = %s
 findtime = 1d
 ignoreip = 127.0.0.1/8 ::1
-`, PrismJailName, logPath, maxRetry, banTimeSeconds)
+`, PrismJailName, maxRetry, banTimeSeconds)
 
 		os.MkdirAll("/etc/fail2ban/jail.d", 0755)
 
@@ -2270,7 +2261,6 @@ func (b *CommandBuilder) InstallFail2BanCmd(m *state.Manager) tea.Cmd {
 
 		os.MkdirAll("/etc/fail2ban/jail.d", 0755)
 		if _, err := os.Stat(PrismFail2BanConfigPath); os.IsNotExist(err) {
-			logPath := detectSSHLogPath()
 			jailConfig := fmt.Sprintf(`[sshd]
 enabled = false
 
@@ -2278,13 +2268,12 @@ enabled = false
 enabled = true
 filter = sshd
 port    = ssh
-logpath = %s
-backend = auto
+backend = systemd
 maxretry = 5
 bantime = 3600
 findtime = 600
 ignoreip = 127.0.0.1/8 ::1
-`, PrismJailName, logPath)
+`, PrismJailName)
 			os.WriteFile(PrismFail2BanConfigPath, []byte(jailConfig), 0644)
 		}
 
