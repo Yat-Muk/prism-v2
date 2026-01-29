@@ -44,17 +44,16 @@ func (g *generator) detectVersion() {
 	// 執行命令獲取版本
 	cmd := exec.CommandContext(ctx, "sing-box", "version")
 	out, err := cmd.Output()
-	if err == nil {
-		// 輸出示例: "sing-box version 1.12.13 ..."
-		parts := strings.Fields(string(out))
-		if len(parts) >= 3 && parts[1] == "version" {
-			g.version = parts[2]
-		}
-	} else {
-		// 記錄警告但不中斷流程，可能用戶未安裝 sing-box
+	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			log.Warnf("檢測 sing-box 版本超時")
 		}
+		return
+	}
+
+	parts := strings.Fields(string(out))
+	if len(parts) >= 3 && parts[1] == "version" {
+		g.version = parts[2]
 	}
 }
 
@@ -88,17 +87,30 @@ func (g *generator) isV112Plus() bool {
 	return !g.isLegacyCore()
 }
 
+func (g *generator) needDNS(cfg *domainConfig.Config) bool {
+	if cfg == nil {
+		return false
+	}
+
+	if cfg.Routing.WARP.Enabled && len(cfg.Routing.WARP.Domains) > 0 {
+		return true
+	}
+
+	if cfg.Routing.IPv6Split.Enabled && len(cfg.Routing.IPv6Split.Domains) > 0 {
+		return true
+	}
+
+	return false
+}
+
 func (g *generator) generateInboundsFromProtocols(protocols []protocol.Protocol) []Inbound {
 	var inbounds []Inbound
 
 	for _, proto := range protocols {
 		// 特殊處理 ShadowTLS：需要先添加 Shadowsocks detour 入站
 		if shadowtls, ok := proto.(*protocol.ShadowTLS); ok {
-			// 1. 先添加 Shadowsocks detour 入站
-			detourInbound := shadowtls.GetDetourInbound()
-			inbounds = append(inbounds, Inbound(detourInbound))
+			inbounds = append(inbounds, Inbound(shadowtls.GetDetourInbound()))
 
-			// 2. 再添加 ShadowTLS 主入站
 			if inboundMap, err := proto.ToSingboxInbound(); err == nil {
 				inbounds = append(inbounds, Inbound(inboundMap))
 			} else {
@@ -166,6 +178,10 @@ func (g *generator) generateLog(cfg *domainConfig.Config) *Log {
 }
 
 func (g *generator) GenerateDNS(ctx context.Context, cfg *domainConfig.Config) (*DNS, error) {
+	if !g.needDNS(cfg) {
+		return nil, nil
+	}
+
 	if g.isLegacyCore() {
 		// 舊版 (< 1.12) 配置
 		strategy := cfg.Routing.DomainStrategy
@@ -173,23 +189,24 @@ func (g *generator) GenerateDNS(ctx context.Context, cfg *domainConfig.Config) (
 			strategy = "prefer_ipv4"
 		}
 
-		servers := []DNSServer{
-			{Tag: "dns_google", Address: "8.8.8.8"},
-			{Tag: "dns_local", Address: "local"},
-		}
-
-		rules := []DNSRule{{RuleSet: []string{"geosite-cn"}, Server: "dns_local"}}
-		return &DNS{Servers: servers, Rules: rules, Final: "dns_google", Strategy: strategy}, nil
+		return &DNS{
+			Servers: []DNSServer{
+				{Tag: "dns_google", Address: "8.8.8.8"},
+				{Tag: "dns_local", Address: "local"},
+			},
+			Final:    "dns_google",
+			Strategy: strategy,
+		}, nil
 	}
 
 	// 新版 (1.12+) 配置：無 Strategy 字段，Type 字段更明確
-	servers := []DNSServer{
-		{Tag: "dns_google", Server: "8.8.8.8", Type: "udp"},
-		{Tag: "dns_local", Type: "local"},
-	}
-
-	rules := []DNSRule{{RuleSet: []string{"geosite-cn"}, Server: "dns_local"}}
-	return &DNS{Servers: servers, Rules: rules, Final: "dns_google"}, nil
+	return &DNS{
+		Servers: []DNSServer{
+			{Tag: "dns_google", Server: "8.8.8.8", Type: "udp"},
+			{Tag: "dns_local", Type: "local"},
+		},
+		Final: "dns_google",
+	}, nil
 }
 
 func (g *generator) GenerateInbounds(ctx context.Context, protocols []protocol.Protocol) ([]Inbound, error) {
@@ -246,43 +263,15 @@ func (g *generator) generateWARPOutbound(cfg *domainConfig.Config) Outbound {
 }
 
 func (g *generator) GenerateRoute(ctx context.Context, cfg *domainConfig.Config) (*Route, error) {
-	ruleSets := []RuleSet{
-		{
-			Tag:            "geosite-cn",
-			Type:           "remote",
-			Format:         "binary",
-			URL:            "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-cn.srs",
-			DownloadDetour: "direct",
-		},
-		{
-			Tag:            "geoip-cn",
-			Type:           "remote",
-			Format:         "binary",
-			URL:            "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-cn.srs",
-			DownloadDetour: "direct",
-		},
-		{
-			Tag:            "geosite-ads",
-			Type:           "remote",
-			Format:         "binary",
-			URL:            "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-ads-all.srs",
-			DownloadDetour: "direct",
-		},
-	}
-
 	var rules []RouteRule
+	var ruleSets []RuleSet
 
-	if g.isLegacyCore() {
-		// 舊版 (< 1.12) 使用 Outbound
+	if g.needDNS(cfg) && g.isLegacyCore() {
 		rules = append(rules,
-			RouteRule{Protocol: "dns", Outbound: "dns-out"},
-			RouteRule{RuleSet: []string{"geosite-ads"}, Outbound: "block"},
-		)
-	} else {
-		// 新版 (>= 1.12) 使用 Action
-		rules = append(rules,
-			RouteRule{Protocol: "dns", Action: "hijack-dns"},
-			RouteRule{RuleSet: []string{"geosite-ads"}, Action: "reject"},
+			RouteRule{
+				Protocol: "dns",
+				Outbound: "dns-out",
+			},
 		)
 	}
 
@@ -294,8 +283,6 @@ func (g *generator) GenerateRoute(ctx context.Context, cfg *domainConfig.Config)
 		rules = append(rules, RouteRule{Domain: cfg.Routing.IPv6Split.Domains, Outbound: "ipv6-out"})
 	}
 
-	rules = append(rules, RouteRule{RuleSet: []string{"geoip-cn", "geosite-cn"}, Outbound: "direct"})
-
 	route := &Route{
 		Rules:               rules,
 		RuleSet:             ruleSets,
@@ -303,7 +290,7 @@ func (g *generator) GenerateRoute(ctx context.Context, cfg *domainConfig.Config)
 		AutoDetectInterface: true,
 	}
 
-	if g.isV112Plus() {
+	if g.isV112Plus() && g.needDNS(cfg) {
 		route.DefaultDomainResolver = map[string]any{"server": "dns_google"}
 	}
 
