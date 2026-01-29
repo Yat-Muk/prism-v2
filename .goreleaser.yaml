@@ -65,7 +65,7 @@ archives:
     format_overrides:
       - goos: windows
         formats: 
-          -zip
+          - zip
     files:
       - README.md
       - LICENSE
