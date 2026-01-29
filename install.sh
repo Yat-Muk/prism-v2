@@ -14,10 +14,13 @@ fi
 
 echo "發現最新版本: $LATEST_VERSION"
 
+# --- 去掉版本號中的 'v' 前綴 (v2.0.4 -> 2.0.4) ---
+VERSION_NUM=${LATEST_VERSION#v}
+
 # 2. 檢測系統架構
 ARCH=$(uname -m)
 if [[ "$ARCH" == "x86_64" ]]; then
-    FILE_ARCH="amd64"
+    FILE_ARCH="x86_64"
 elif [[ "$ARCH" == "aarch64" ]]; then
     FILE_ARCH="arm64"
 else
@@ -26,11 +29,13 @@ else
 fi
 
 # 3. 構造下載鏈接
-FILENAME="prism_${LATEST_VERSION}_linux_${FILE_ARCH}.tar.gz"
+# 正確格式應為: prism_2.0.4_linux_x86_64.tar.gz
+FILENAME="prism_${VERSION_NUM}_linux_${FILE_ARCH}.tar.gz"
 URL="https://github.com/$REPO/releases/download/$LATEST_VERSION/$FILENAME"
 
 # 4. 下載與安裝
 echo "正在下載 Prism $LATEST_VERSION for $FILE_ARCH..."
+echo "下載地址: $URL"
 wget -q --show-progress "$URL" -O prism.tar.gz
 
 if [ $? -ne 0 ]; then
@@ -56,5 +61,5 @@ rm prism.tar.gz checksums.txt README.md LICENSE 2>/dev/null
 
 echo "==============================================="
 echo " Prism $LATEST_VERSION 安裝完畢！"
-echo " 請輸入 'prism' (或 'prism') 啟動程序"
+echo " 請輸入 'prism' 啟動程序"
 echo "==============================================="
