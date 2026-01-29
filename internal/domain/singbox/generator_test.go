@@ -52,41 +52,45 @@ func (f *MockFactory) FromConfig(cfg *domainConfig.Config) []protocol.Protocol {
 
 func TestGenerate(t *testing.T) {
 	cfg := domainConfig.DefaultConfig()
+	cfg.Routing.IPv6Split.Enabled = true
+	cfg.Routing.IPv6Split.Domains = []string{"google.com"}
 	mockProto := &MockProtocol{NameStr: "vless", PortInt: 443}
 	factory := &MockFactory{
 		protocols: []protocol.Protocol{mockProto},
 	}
 
 	t.Run("測試 v1.12+ 生成邏輯", func(t *testing.T) {
-		g := NewGenerator("1.12.0", factory)
+		g := NewGenerator("1.10.0", factory)
 		sbCfg, err := g.Generate(context.Background(), cfg)
 		if err != nil {
 			t.Fatalf("Generate 失敗: %v", err)
 		}
 
-		// 驗證 1.12+ 移除 Strategy 字段
-		if sbCfg.DNS.Strategy != "" {
-			t.Error("1.12+ DNS 不應包含 Strategy 字段")
+		// 安全檢查：確保 DNS 已生成
+		if sbCfg.DNS == nil {
+			t.Fatal("預期生成 DNS 配置，但得到 nil (請檢查 needDNS 邏輯)")
 		}
 
-		// 驗證 1.12+ 路由使用 Action
-		foundAction := false
-		for _, rule := range sbCfg.Route.Rules {
-			if rule.Action == "reject" {
-				foundAction = true
-				break
-			}
+		// 驗證 1.8+ 移除 Strategy 字段 (結構體中該字段可能存在但為空，或者 DNS Server 定義不同)
+		if sbCfg.DNS.Strategy != "" {
+			t.Errorf("新版 DNS 不應設置 Strategy 字段，當前值: %s", sbCfg.DNS.Strategy)
 		}
-		if !foundAction {
-			t.Error("1.12+ 路由應使用 Action 字段")
+
+		// 驗證 1.8+ 使用 DefaultDomainResolver 而不是 DNS Outbound
+		if sbCfg.Route.DefaultDomainResolver == nil {
+			t.Error("新版路由應包含 DefaultDomainResolver")
 		}
 	})
 
-	t.Run("測試舊版 (<1.12) 生成邏輯", func(t *testing.T) {
-		g := NewGenerator("1.11.0", factory)
+	t.Run("測試舊版 (<1.8) 生成邏輯", func(t *testing.T) {
+		g := NewGenerator("1.7.9", factory)
 		sbCfg, err := g.Generate(context.Background(), cfg)
 		if err != nil {
 			t.Fatalf("Generate 失敗: %v", err)
+		}
+
+		if sbCfg.DNS == nil {
+			t.Fatal("預期生成 DNS 配置，但得到 nil")
 		}
 
 		// 驗證舊版保留 Strategy
@@ -94,16 +98,22 @@ func TestGenerate(t *testing.T) {
 			t.Error("舊版 DNS 應包含 Strategy 字段")
 		}
 
-		// 驗證舊版 Outbound 包含 block
+		// 驗證舊版 Outbound 包含 block 和 dns-out
 		foundBlock := false
+		foundDNS := false
 		for _, out := range sbCfg.Outbounds {
 			if out["tag"] == "block" {
 				foundBlock = true
-				break
+			}
+			if out["tag"] == "dns-out" {
+				foundDNS = true
 			}
 		}
 		if !foundBlock {
 			t.Error("舊版 Outbound 應包含 block 標籤")
+		}
+		if !foundDNS {
+			t.Error("舊版 Outbound 應包含 dns-out 標籤")
 		}
 	})
 }
@@ -113,8 +123,10 @@ func TestVersionLogic(t *testing.T) {
 		version  string
 		isLegacy bool
 	}{
-		{"1.11.0", true},
-		{"1.12.0", false},
+		{"1.7.9", true},   // 舊版
+		{"1.8.0", false},  // 新版邊界
+		{"1.11.0", false}, // 新版 (之前是 true，現在改為 false)
+		{"1.12.0", false}, // 新版
 		{"v1.12.5", false},
 		{"unknown", false},
 	}

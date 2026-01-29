@@ -79,8 +79,8 @@ func (g *generator) isLegacyCore() bool {
 	major, _ := strconv.Atoi(parts[0])
 	minor, _ := strconv.Atoi(parts[1])
 
-	// 定義舊版：主版本為1 且 次版本 < 12 (即 1.11.x 及以下)
-	return major == 1 && minor < 12
+	// 定義舊版：主版本為1 且 次版本 < 8 (即 1.8.x 及以下)
+	return major == 1 && minor < 8
 }
 
 func (g *generator) isV112Plus() bool {
