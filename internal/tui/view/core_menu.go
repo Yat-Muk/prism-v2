@@ -73,9 +73,9 @@ func RenderCoreMenu(
 			{constants.KeyCore_SelectVersion, "安裝指定版本", "(手動指定版本號安裝)", style.Snow1},
 			{constants.KeyCore_SelectSource, "切換更新源", "(GitHub / 鏡像源)", style.Snow1},
 			{"", "", "", lipgloss.Color("")},
-			{constants.KeyScript_Update, "檢查腳本更新", "(檢查 Prism 更新)", style.Aurora2},
-			{"", "", "", lipgloss.Color("")},
 			{constants.KeyCore_Uninstall, "卸載核心", "(移除 sing-box)", style.StatusRed},
+			{"", "", "", lipgloss.Color("")},
+			{constants.KeyScript_Update, "檢查腳本更新", "(檢查 Prism 更新)", style.Aurora2},
 		}
 	} else {
 		items = []MenuItem{

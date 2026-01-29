@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"archive/tar"
 	"bufio"
+	"compress/gzip"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -1784,45 +1786,123 @@ func (b *CommandBuilder) CheckScriptUpdateCmd(m *state.Manager) tea.Cmd {
 	}
 }
 
-// UpdateScriptExecCmd 執行腳本自我更新
+// UpdateScriptExecCmd 執行腳本自我更新 (支持 tar.gz 解壓)
 func (b *CommandBuilder) UpdateScriptExecCmd(m *state.Manager) tea.Cmd {
 	return func() tea.Msg {
+		// 1. 獲取最新版本號 (從 State 中獲取)
+		version := m.ScriptUpdate().LatestVer // 例如 "v2.0.4"
+		if version == "" {
+			return msg.CommandResultMsg{Success: false, Message: "無法獲取目標版本號"}
+		}
+		// 去掉 v 前綴用於構造文件名
+		verNum := strings.TrimPrefix(version, "v")
+
+		// 2. 架構映射 (Go -> GoReleaser)
 		arch := runtime.GOARCH
+		if arch == "amd64" {
+			arch = "x86_64"
+		} else if arch == "arm64" {
+			arch = "arm64"
+		} else {
+			return msg.CommandResultMsg{Success: false, Message: "不支持的架構: " + arch}
+		}
+
 		osName := runtime.GOOS
 		if osName != "linux" {
 			return msg.CommandResultMsg{Success: false, Message: "僅支持 Linux 系統自動更新"}
 		}
 
-		fileName := fmt.Sprintf("prism_%s_%s", osName, arch)
-		url := fmt.Sprintf("https://github.com/Yat-Muk/prism-v2/releases/latest/download/%s", fileName)
+		// 3. 構造下載 URL (對應 .tar.gz)
+		// 文件名格式: prism_2.0.4_linux_x86_64.tar.gz
+		fileName := fmt.Sprintf("prism_%s_%s_%s.tar.gz", verNum, osName, arch)
+		url := fmt.Sprintf("https://github.com/Yat-Muk/prism-v2/releases/download/%s/%s", version, fileName)
 
+		b.log.Info("開始更新流程", zap.String("url", url))
+
+		// 4. 下載 .tar.gz 到臨時文件
 		exePath, err := os.Executable()
 		if err != nil {
 			return msg.CommandResultMsg{Success: false, Message: "無法獲取程序路徑", Err: err}
 		}
 
-		tmpPath := exePath + ".new"
-		b.log.Info("正在下載新版本腳本...", zap.String("url", url))
+		tmpTarPath := exePath + ".tar.gz"
+		defer os.Remove(tmpTarPath) // 確保清理
 
-		if err := b.downloadFile(url, tmpPath); err != nil {
-			return msg.CommandResultMsg{Success: false, Message: "下載失敗", Err: err}
+		if err := b.downloadFile(url, tmpTarPath); err != nil {
+			return msg.CommandResultMsg{Success: false, Message: "下載更新包失敗", Err: err}
 		}
 
-		if err := os.Chmod(tmpPath, 0755); err != nil {
+		// 5. 解壓並提取 prism 二進制文件
+		tmpBinPath := exePath + ".new"
+		if err := extractBinaryFromTarGz(tmpTarPath, "prism", tmpBinPath); err != nil {
+			return msg.CommandResultMsg{Success: false, Message: "解壓失敗", Err: err}
+		}
+
+		// 6. 賦予權限並替換
+		if err := os.Chmod(tmpBinPath, 0755); err != nil {
 			return msg.CommandResultMsg{Success: false, Message: "權限設置失敗", Err: err}
 		}
 
-		if err := os.Rename(tmpPath, exePath); err != nil {
+		// Linux 下可以直接 Rename 正在運行的文件 (Atomic Replace)
+		if err := os.Rename(tmpBinPath, exePath); err != nil {
 			return msg.CommandResultMsg{Success: false, Message: "替換文件失敗", Err: err}
 		}
 
-		b.log.Info("腳本更新成功，準備重啟")
+		b.log.Info("腳本更新成功")
 
 		return msg.CommandResultMsg{
 			Success: true,
-			Message: "更新成功！請手動重啟程序生效 (輸入 prism)",
+			Message: "更新成功！請重啟程序生效",
 		}
 	}
+}
+
+// 輔助函數：從 tar.gz 中提取指定文件
+func extractBinaryFromTarGz(tarPath, targetFileName, destPath string) error {
+	// 打開文件
+	f, err := os.Open(tarPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// gzip 解壓
+	gzr, err := gzip.NewReader(f)
+	if err != nil {
+		return err
+	}
+	defer gzr.Close()
+
+	// tar 解包
+	tr := tar.NewReader(gzr)
+
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break // 沒找到文件
+		}
+		if err != nil {
+			return err
+		}
+
+		// 找到名為 "prism" 的文件
+		if header.Name == targetFileName {
+			// 創建目標文件
+			outFile, err := os.Create(destPath)
+			if err != nil {
+				return err
+			}
+			defer outFile.Close()
+
+			// 寫入內容
+			if _, err := io.Copy(outFile, tr); err != nil {
+				return err
+			}
+			return nil // 成功
+		}
+	}
+
+	return fmt.Errorf("在壓縮包中未找到文件: %s", targetFileName)
 }
 
 // ========================================

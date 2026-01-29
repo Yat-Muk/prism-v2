@@ -710,6 +710,20 @@ func (r *Router) routeMessage(message tea.Msg) tea.Cmd {
 		}
 		return nil
 
+	case msg.ScriptCheckMsg:
+        m.state.ScriptUpdate.IsChecking = false
+
+        if msg.Success {
+            m.state.ScriptUpdate.LatestVer = "v" + msg.LatestVer
+            m.state.ScriptUpdate.Changelog = msg.Changelog
+            m.state.ScriptUpdate.StatusMsg = "發現新版本，請確認更新"
+        } else {
+            m.state.ScriptUpdate.StatusMsg = "檢查更新失敗: " + msg.Err.Error()
+            m.state.ScriptUpdate.LatestVer = "" 
+        }
+        return m, nil
+    }
+
 	case msg.ServiceHealthMsg:
 		if msgType.Err != nil {
 			m.UI().SetStatus(state.StatusError, fmt.Sprintf("健康檢查失敗: %v", msgType.Err), "", false)
