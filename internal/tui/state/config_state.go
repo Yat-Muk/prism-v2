@@ -130,5 +130,5 @@ func (c *ConfigState) SyncPortsToMap(portState *PortState) {
 	}
 
 	// 如果 PortState 有 Hy2HoppingRange 字段，也可以在这里同步
-	// portState.Hy2HoppingRange = c.Config.Protocols.Hysteria2.PortHopping
+	portState.Hy2HoppingRange = c.Config.Protocols.Hysteria2.PortHopping
 }

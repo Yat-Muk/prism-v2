@@ -657,7 +657,7 @@ func DefaultConfig() *Config {
 				SNI:           "www.microsoft.com",
 				PublicKey:     realityPublicKey,
 				PrivateKey:    realityPrivateKey,
-				ShortID:       "",
+				ShortID:       realityShortID,
 				PaddingMode:   "official",
 				PaddingScheme: nil,
 			},

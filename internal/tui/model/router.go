@@ -718,14 +718,23 @@ func (r *Router) routeMessage(message tea.Msg) tea.Cmd {
 		m.Core().IsCheckingScript = false
 
 		if msgType.Success {
-			m.Core().ScriptLatestVersion = "v" + msgType.LatestVer
+			newVer := "v" + msgType.LatestVer
+
+			m.Core().ScriptLatestVersion = newVer
 			m.Core().ScriptChangelog = msgType.Changelog
-			m.UI().SetStatus(state.StatusSuccess, "發現新版本", "", false)
+
+			currentVer := strings.TrimSpace(strings.TrimPrefix(m.Core().ScriptVersion, "v"))
+			latestVer := strings.TrimSpace(strings.TrimPrefix(msgType.LatestVer, "v"))
+
+			if currentVer != latestVer {
+				m.UI().SetStatus(state.StatusSuccess, "發現新版本", "", false)
+			} else {
+				m.UI().SetStatus(state.StatusInfo, "當前已是最新版本", "", false)
+			}
 		} else {
 			m.UI().SetStatus(state.StatusError, "檢查更新失敗", msgType.Err.Error(), false)
 			m.Core().ScriptLatestVersion = ""
 		}
-
 		return nil
 
 	case msg.ServiceHealthMsg:

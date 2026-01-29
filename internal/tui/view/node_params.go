@@ -27,7 +27,7 @@ func RenderNodeParams(cfg *config.Config, serverIP string) string {
 	// 鍵樣式：固定寬度 18，右對齊，灰色
 	keyStyle := lipgloss.NewStyle().
 		Foreground(style.Snow3).
-		Width(18).
+		Width(20).
 		Align(lipgloss.Right).
 		MarginRight(1)
 
@@ -108,6 +108,10 @@ func RenderNodeParams(cfg *config.Config, serverIP string) string {
 
 		renderRow("Server", addr, false)
 		renderRow("Server Port", fmt.Sprintf("%d", p.Hysteria2.Port), false)
+
+		if p.Hysteria2.PortHopping != "" {
+			renderRow("Port Hopping", p.Hysteria2.PortHopping, false)
+		}
 
 		pass := p.Hysteria2.Password
 		if pass == "" {
