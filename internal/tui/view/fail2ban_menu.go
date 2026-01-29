@@ -22,7 +22,7 @@ func RenderFail2BanMenu(info *types.Fail2BanInfo, list []string, inputMode bool,
 	var bodyContent string
 
 	if inputMode {
-		listHeader := lipgloss.NewStyle().
+		listHeader := " " + lipgloss.NewStyle().
 			Foreground(style.Aurora2).
 			Bold(true).
 			Render("--- 當前封禁名單 (請輸入 IP 解封) ---")

@@ -1274,7 +1274,7 @@ func (h *KeyHandler) submitFail2BanMenu(m *state.Manager, input string) (*state.
 		m.Tools().Fail2BanLogOutput = []string{}
 
 		// 3. 設置提示
-		m.UI().SetStatus(state.StatusInfo, "請輸入要解封的 IP", "參考上方列表，按 Enter 確認", true)
+		m.UI().SetStatus(state.StatusInfo, "請輸入要解封的 IP", "", true)
 
 		// 4. 批量執行：聚焦輸入框 + 獲取列表數據
 		return m, tea.Batch(

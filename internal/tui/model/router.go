@@ -679,13 +679,16 @@ func (r *Router) routeMessage(message tea.Msg) tea.Cmd {
 		}
 
 		// 分支 A: Fail2Ban 列表模式
-		if m.Tools().IsViewingFail2BanLogs {
+		if msgType.Mode == "fail2ban_list" {
 			m.Tools().Fail2BanLogOutput = msgType.Logs
 
-			if m.Tools().Fail2BanInputMode {
-				return nil
+			// 只有當用戶明確是在"查看列表"(非輸入模式)時，才跳轉
+			if !m.Tools().Fail2BanInputMode {
+				m.Tools().IsViewingFail2BanLogs = true
+				return ui.SwitchView(state.LogViewerView)
 			}
-			return ui.SwitchView(state.LogViewerView)
+			// 輸入模式下，什麼都不做(停留在當前頁面)
+			return nil
 		}
 
 		// 分支 B: 標準日誌查看模式 (實時/完整/錯誤日誌)

@@ -73,6 +73,8 @@ func renderHeader(scriptVersion string) string {
 	versionText := scriptVersion
 	if versionText == "" {
 		versionText = "檢查中..."
+	} else if !strings.HasPrefix(versionText, "v") {
+		versionText = "v" + versionText
 	}
 
 	infoContent := lipgloss.JoinHorizontal(
@@ -138,7 +140,7 @@ func renderSystemInfoPanel(
 			labelStyle.Render("系統: "),
 			valueMuted.Render(fmt.Sprintf("%-18s", "檢查中...")),
 			labelStyle.Render("內核: "),
-			valueMuted.Render(fmt.Sprintf("%-9s", "檢查中...")),
+			valueMuted.Render(fmt.Sprintf("%-10s", "檢查中...")),
 			labelStyle.Render("BBR: "),
 			valueMuted.Render("檢查中..."),
 		)

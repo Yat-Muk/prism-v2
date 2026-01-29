@@ -36,12 +36,11 @@ func RenderCertStatus(certList []types.CertInfo, ti textinput.Model, statusMsg s
 	// 表頭
 	tableHeader := " " + lipgloss.NewStyle().
 		Foreground(style.Aurora4).
-		Bold(true).
-		Render(fmt.Sprintf("%-34s  %-26s  %-20s  %s", "域名", "過期時間", "剩餘", "狀態"))
+		Render(fmt.Sprintf("%-17s  %-7s  %-6s  %s", "域名", "過期時間", "剩餘", "狀態"))
 
 	var rows []string
 	rows = append(rows, tableHeader)
-	rows = append(rows, lipgloss.NewStyle().Foreground(style.Polar4).Render(strings.Repeat("-", 95)))
+	rows = append(rows, " "+lipgloss.NewStyle().Foreground(style.Polar4).Render(strings.Repeat("┄", 48)))
 
 	seen := make(map[string]bool)
 
@@ -99,10 +98,14 @@ func RenderCertStatus(certList []types.CertInfo, ti textinput.Model, statusMsg s
 	// 拼接列表
 	listContent := strings.Join(rows, "\n")
 
+	items := []MenuItem{}
+
+	menu := renderMenuWithAlignment(items, 0, "", false)
+
 	// 底部說明
 	instruction := lipgloss.NewStyle().
 		Foreground(style.Snow3).
-		Render("\n 說明：\n  • 系統每日自動檢查並續期剩餘 30 天內的證書\n  • 按 [R] 鍵可手動刷新列表")
+		Render(" 💡 系統每日自動檢查並續期剩餘 30 天內的證書")
 
 	statusBlock := RenderStatusMessage(statusMsg)
 	footer := RenderInputFooter(ti)
@@ -112,7 +115,9 @@ func RenderCertStatus(certList []types.CertInfo, ti textinput.Model, statusMsg s
 		header,
 		desc,
 		divider,
-		"\n"+listContent,
+		listContent,
+		menu,
+		"",
 		instruction,
 		statusBlock,
 		footer,

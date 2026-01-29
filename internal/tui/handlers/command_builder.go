@@ -2363,7 +2363,7 @@ func (b *CommandBuilder) GetFail2BanListCmd(m *state.Manager) tea.Cmd {
 		logs = append(logs, "")
 		logs = append(logs, fmt.Sprintf("總計: %d 個", len(bannedIPs)))
 
-		return msg.LogViewMsg{Mode: "static", Logs: logs}
+		return msg.LogViewMsg{Mode: "fail2ban_list", Logs: logs}
 	}
 }
 
@@ -2374,16 +2374,22 @@ func (b *CommandBuilder) ToggleFail2BanCmd(running bool) tea.Cmd {
 		if running {
 			action = "stop"
 		}
+
+		b.log.Info("切換 Fail2Ban 狀態", zap.String("action", action))
+
 		cmd := exec.Command("systemctl", action, "fail2ban")
 		if err := cmd.Run(); err != nil {
 			return msg.CommandResultMsg{Success: false, Message: fmt.Sprintf("執行 %s 失敗: %v", action, err)}
 		}
 		if action == "stop" {
 			time.Sleep(500 * time.Millisecond)
-		} else {
-			time.Sleep(1 * time.Second)
 		}
-		return msg.CommandResultMsg{Success: true, Message: "服務狀態已更新", Data: "REFRESH_FAIL2BAN"}
+
+		return msg.CommandResultMsg{
+			Success: true,
+			Message: "服務狀態已更新",
+			Data:    "REFRESH_FAIL2BAN",
+		}
 	}
 }
 
