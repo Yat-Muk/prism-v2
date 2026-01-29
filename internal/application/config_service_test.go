@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/Yat-Muk/prism-v2/internal/domain/config"
@@ -11,9 +12,13 @@ import (
 // MockRepo 模擬倉庫，用於測試 Service 邏輯
 type MockRepo struct {
 	cfg *config.Config
+	mu  sync.RWMutex
 }
 
 func (m *MockRepo) Load(ctx context.Context) (*config.Config, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	if m.cfg == nil {
 		return config.DefaultConfig(), nil
 	}
@@ -22,6 +27,9 @@ func (m *MockRepo) Load(ctx context.Context) (*config.Config, error) {
 }
 
 func (m *MockRepo) Save(ctx context.Context, c *config.Config) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	// 模擬寫入磁盤
 	m.cfg = c.DeepCopy()
 	return nil
@@ -32,7 +40,6 @@ func TestConfigService_UpdateConfig(t *testing.T) {
 	mockRepo := &MockRepo{}
 	logger := zap.NewNop()
 
-	// ✅ 修正：使用正確的構造函數參數 (repo, logger)
 	svc := NewConfigService(mockRepo, logger)
 	ctx := context.Background()
 
@@ -61,12 +68,15 @@ func TestConfigService_UpdateConfig(t *testing.T) {
 	}
 
 	// 4. 驗證：Repository 是否被更新
+	// 注意：直接訪問 mockRepo 字段在單線程測試中是安全的，但在嚴格環境下也應加鎖
+	mockRepo.mu.RLock()
 	if mockRepo.cfg.Server.Port != newPort {
 		t.Errorf("Port not updated in repo. Want %d, Got %d", newPort, mockRepo.cfg.Server.Port)
 	}
 	if mockRepo.cfg.UUID != newUUID {
 		t.Errorf("UUID not updated in repo. Want %s, Got %s", newUUID, mockRepo.cfg.UUID)
 	}
+	mockRepo.mu.RUnlock()
 
 	// 5. 驗證：再次讀取
 	reloadedCfg, _ := svc.GetConfig(ctx)
@@ -106,16 +116,15 @@ func TestConfigService_Concurrency(t *testing.T) {
 	ctx := context.Background()
 
 	// 模擬並發讀寫
-	// 如果沒有鎖，可能會導致 map 並發讀寫 panic 或數據不一致
 	done := make(chan bool)
-	concurrency := 10
+	concurrency := 10 // 並發協程數
 
 	for i := 0; i < concurrency; i++ {
 		go func() {
-			// 讀取
+			// 讀取操作
 			svc.GetConfig(ctx)
 
-			// 寫入
+			// 寫入操作
 			svc.UpdateConfig(ctx, func(c *config.Config) error {
 				c.Server.Port++
 				return nil
